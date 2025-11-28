@@ -26,7 +26,7 @@ function AttachMapRef({ setMap }: { setMap: (m: L.Map) => void }) {
   useEffect(() => {
     setMap(map);
     // IMPORTANT: effect must return a cleanup function (even empty) — prevents React treating non-function as cleanup
-    return () => {};
+    return () => { };
   }, [map, setMap]);
 
   return null;
@@ -209,7 +209,7 @@ export default function MapViewerEnhanced() {
     if (wmsRef.current && map.hasLayer(wmsRef.current)) {
       try {
         map.removeLayer(wmsRef.current);
-      } catch {}
+      } catch { }
       wmsRef.current = null;
     }
 
@@ -225,7 +225,7 @@ export default function MapViewerEnhanced() {
     }
 
     // Always return a cleanup function (even if empty) — prevents React errors
-    return () => {};
+    return () => { };
   }, [viewMode]);
 
   /* ---------------- Autocomplete (Nominatim restricted to Germany) ---------------- */
@@ -524,6 +524,28 @@ export default function MapViewerEnhanced() {
 
         {/* Map area */}
         <div style={{ flex: 1, position: "relative" }}>
+          {/* Show menu button when sidebar is hidden */}
+          {!sidebarOpen && (
+            <button
+              onClick={() => setSidebarOpen(true)}
+              style={{
+                position: "absolute",
+                left: 10,
+                top: 16,
+                zIndex: 6000,
+                padding: "8px 12px",
+                background: theme === "dark" ? "#bb6b32" : "#c96a26",
+                color: "#fff",
+                borderRadius: 8,
+                border: "none",
+                cursor: "pointer",
+                boxShadow: "0 4px 8px rgba(0,0,0,0.2)"
+              }}
+            >
+              ☰ Menu
+            </button>
+          )}
+
           <MapContainer center={INITIAL_CENTER} zoom={INITIAL_ZOOM} style={{ height: "100vh", width: "100%" }}>
             <AttachMapRef setMap={(m) => (mapRef.current = m)} />
 
@@ -540,7 +562,26 @@ export default function MapViewerEnhanced() {
             <FeatureGroup ref={(r: any) => (featureGroupRef.current = r)}>
               {/* @ts-ignore */}
               <EditControl position="topright" onCreated={onCreated} onDeleted={onDeleted}
-                draw={{ rectangle: true, polygon: true, polyline: false, marker: false, circle: false, circlemarker: false }}
+                draw={{
+                  rectangle: {
+                    shapeOptions: {
+                      color: "#ff7800",
+                      weight: 2,
+                      fillOpacity: 0.15
+                    }
+                  },
+                  polygon: {
+                    shapeOptions: {
+                      color: "#ff7800",
+                      weight: 2,
+                      fillOpacity: 0.15
+                    }
+                  },
+                  polyline: false,
+                  marker: false,
+                  circle: false,
+                  circlemarker: false
+                }}
                 edit={{ remove: true }} />
             </FeatureGroup>
 
@@ -550,13 +591,37 @@ export default function MapViewerEnhanced() {
           </MapContainer>
 
           {/* Toolbar & Controls */}
+          <div className="controls-wrapper">
           <Toolbar onStartPolygon={startPolygon} onStartRectangle={startRectangle} onEdit={startEdit} onSaveEdit={saveEdit} onDeleteShapes={deleteShapes} />
-          <MapControls onZoomIn={() => mapRef.current?.zoomIn()} onZoomOut={() => mapRef.current?.zoomOut()} onToggleView={() => { setFading(true); setTimeout(() => { setViewMode(v => v === "base" ? "map" : "base"); setFading(false); }, 160); }} viewMode={viewMode} />
-
+        
+          
+          <MapControls  onZoomIn={() => mapRef.current?.zoomIn()} onZoomOut={() => mapRef.current?.zoomOut()} onToggleView={() => { setFading(true); setTimeout(() => { setViewMode(v => v === "base" ? "map" : "base"); setFading(false); }, 160); }} viewMode={viewMode} />
+          </div>
           {/* Reset + theme */}
           <div style={{ position: "absolute", right: 96, top: 16, zIndex: 5600, display: "flex", gap: 8 }}>
-            <button onClick={() => resetMap()} title="Reset map" style={{ padding: "8px 10px", borderRadius: 10, background: theme === "dark" ? "#0b1220" : "#fff", border: "1px solid #e6e6e6", cursor: "pointer" }}>🔄 Reset</button>
-            <div style={{ padding: "8px 12px", borderRadius: 10, background: theme === "dark" ? "#071022" : "#fff", border: "1px solid #e6e6e6" }}>{theme === "dark" ? "🌙 Dark" : "☀️ Light"}</div>
+            <button
+              onClick={() => resetMap()}
+              title="Reset map"
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                background: theme === "dark" ? "#0b1220" : "#fff",
+                border: "1px solid #e6e6e6",
+                cursor: "pointer",
+                color: theme === "dark" ? "#e6eef8" : "#111827"  // 🔥 fix text color
+              }}
+            >
+              🔄 Reset
+            </button>
+            <div style={{
+              padding: "8px 12px",
+              borderRadius: 10,
+              background: theme === "dark" ? "#0b1220" : "#fff",
+              border: "1px solid #e6e6e6",
+              color: theme === "dark" ? "#fff" : "#111"
+            }}>
+              {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
+            </div>
           </div>
 
           {/* Bottom-left view toggle */}
@@ -590,7 +655,7 @@ export default function MapViewerEnhanced() {
 
           {/* Mini-map */}
           <div style={{ position: "absolute", right: 20, bottom: 20, width: 140, height: 100, zIndex: 5500, borderRadius: 8, overflow: "hidden", boxShadow: "0 6px 16px rgba(0,0,0,0.12)" }}>
-            <MapContainer center={INITIAL_CENTER} zoom={8} dragging={false} scrollWheelZoom={false} doubleClickZoom={false} attributionControl={false} zoomControl={false} style={{ width: "100%", height: "100%" }}>
+            <MapContainer center={INITIAL_CENTER} zoom={8} dragging={false} scrollWheelZoom={false} doubleClickZoom={false} attributionControl={false} zoomControl={false} style={{ width: "100vw", height: "100vh" }}>
               <AttachMapRef setMap={(m) => (miniRef.current = m)} />
               <TileLayer url={theme === "dark" ? TILE_CARTO_DARK : TILE_OSM} />
             </MapContainer>

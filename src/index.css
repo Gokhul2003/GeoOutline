@@ -71,3 +71,14 @@ html, body, #root {
   border-radius: 6px;
   font-size: 13px;
 }
+/* Make rectangles and polygons visible on satellite */
+.leaflet-interactive {
+  stroke: #ff7b00 !important;
+  stroke-width: 3px !important;
+  fill: rgba(255, 140, 0, 0.18) !important;
+}
+
+/* Remove right white border glitches */
+.leaflet-container {
+  background: transparent !important;
+}

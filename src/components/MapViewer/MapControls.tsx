@@ -11,18 +11,53 @@ export default function MapControls({
   onZoomIn,
   onZoomOut,
   onToggleView,
-  viewMode,
+  viewMode
 }: Props) {
-  return (
-    <div style={{ position: "absolute", right: 18, bottom: 120, zIndex: 6000, display: "flex", flexDirection: "column", gap: 8 }}>
-      <button title="Zoom in" onClick={onZoomIn} style={{ width: 44, height: 44, borderRadius: 8, background: "white", boxShadow: "0 6px 18px rgba(0,0,0,0.08)", border: "1px solid rgba(0,0,0,0.06)", cursor: "pointer" }}>+</button>
-      <button title="Zoom out" onClick={onZoomOut} style={{ width: 44, height: 44, borderRadius: 8, background: "white", boxShadow: "0 6px 18px rgba(0,0,0,0.08)", border: "1px solid rgba(0,0,0,0.06)", cursor: "pointer" }}>−</button>
+  const btn: React.CSSProperties = {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    background: "white",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
+    border: "1px solid rgba(0,0,0,0.08)",
+    cursor: "pointer",
+    fontSize: 22,
+    fontWeight: 500
+  };
 
-      {/* tiny view-mode indicator (optional) */}
-      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-        <div style={{ padding: "6px 10px", borderRadius: 8, background: viewMode === "base" ? "#c96a26" : "#fff", color: viewMode === "base" ? "#fff" : "#111827", fontSize: 12 }}>Base</div>
-        <div style={{ padding: "6px 10px", borderRadius: 8, background: viewMode === "map" ? "#c96a26" : "#fff", color: viewMode === "map" ? "#fff" : "#111827", fontSize: 12 }}>Map</div>
-      </div>
+  return (
+    <div
+      style={{
+        position: "absolute",
+        right: 18,
+        bottom: 120,
+        zIndex: 6000,
+        display: "flex",
+        flexDirection: "column",
+        gap: 10
+      }}
+    >
+      {/* ZOOM IN */}
+      <button title="Zoom in" onClick={onZoomIn} style={btn}>
+        +
+      </button>
+
+      {/* ZOOM OUT */}
+      <button title="Zoom out" onClick={onZoomOut} style={btn}>
+        −
+      </button>
+
+      {/* TOGGLE VIEW */}
+      <button title="Toggle base/map" onClick={onToggleView} style={btn}>
+        {viewMode === "base" ? (
+          <span role="img" aria-label="map">🗺</span>
+        ) : (
+          <span role="img" aria-label="satellite">🛰</span>
+        )}
+      </button>
     </div>
   );
 }
