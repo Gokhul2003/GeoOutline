@@ -1,3 +1,4 @@
+// MapViewerEnhanced.tsx
 import React, { useEffect, useRef, useState } from "react";
 import {
   MapContainer,
@@ -16,24 +17,33 @@ import toast, { Toaster } from "react-hot-toast";
 import Toolbar from "./Toolbar";
 import MapControls from "./MapControls";
 
-/* ---------------- Helper: attach map ref safely (v4) ---------------- */
+/* ======================== Helpers ======================== */
+
+/** AttachMapRef safely sets mapRef when MapContainer creates a map (react-leaflet v4) */
 function AttachMapRef({ setMap }: { setMap: (m: L.Map) => void }) {
   const map = useMap();
+
   useEffect(() => {
     setMap(map);
+    // IMPORTANT: effect must return a cleanup function (even empty) — prevents React treating non-function as cleanup
+    return () => {};
   }, [map, setMap]);
+
   return null;
 }
 
-/* ---------------- AOI storage helpers ---------------- */
+/* ======================== Types / Storage ======================== */
+
 interface AOI {
   id: string;
   name: string;
   geometry: any;
   createdAt: string;
 }
+
 const STORAGE_KEY = "flowbit_aoi_list_v1";
 const THEME_KEY = "flowbit_theme_v1";
+
 function loadAOIs(): AOI[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -51,16 +61,39 @@ function addAOI(aoi: AOI) {
   saveAOIs(list);
 }
 
-/* ---------------- Tiles + initial view ---------------- */
+/* ======================== Tile & WMS config ======================== */
+
+/** REQUIRED: NRW WMS endpoint and layer name (using EPSG:3857) */
+const NRW_WMS_URL = "https://www.wms.nrw.de/geobasis/wms_nw_dop";
+const NRW_WMS_LAYER = "nw_dop_rgb";
+
+/** Map tiles for 'map' view and dark mode */
 const TILE_OSM = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-const TILE_ARCGIS = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{x}/{y}";
 const TILE_CARTO_DARK = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
 
+/* initial center */
 const INITIAL_CENTER: [number, number] = [50.9375, 6.9603];
 const INITIAL_ZOOM = 12;
 
-/* ---------------- Sync minimap ---------------- */
-/* ---------------- Sync minimap ---------------- */
+/* create WMS tile layer (Leaflet) */
+function createWmsLayer(map: L.Map, layerName: string) {
+  // Use leaflet's WMS helper — cast to any for typings
+  const wms = (L.tileLayer as any).wms(NRW_WMS_URL, {
+    layers: layerName,
+    format: "image/jpeg",
+    transparent: false,
+    version: "1.3.0",
+    attribution: "© GeoBasis NRW",
+    tiled: true,
+    noWrap: true
+  }) as L.TileLayer.WMS;
+
+  wms.addTo(map);
+  return wms;
+}
+
+/* ======================== Minimap sync hook (NO destroy) ======================== */
+
 function useSyncMiniMap(
   mainMapRef: React.RefObject<L.Map | null>,
   miniMapRef: React.RefObject<L.Map | null>
@@ -74,15 +107,16 @@ function useSyncMiniMap(
     const sync = () => {
       try {
         const c = main.getCenter();
-        const z = Math.max(0, main.getZoom() - 4); // minimap is zoomed out
+        const z = Math.max(0, main.getZoom() - 4);
         mini.setView(c, z, { animate: false });
-      } catch {}
+      } catch {
+        /* ignore */
+      }
     };
 
     main.on("move", sync);
     main.on("zoom", sync);
-
-    sync(); // initial sync
+    sync();
 
     return () => {
       main.off("move", sync);
@@ -91,8 +125,8 @@ function useSyncMiniMap(
   }, [mainMapRef, miniMapRef]);
 }
 
+/* ======================== Shortcut Panel ======================== */
 
-/* ---------------- Shortcut help panel component ---------------- */
 function ShortcutPanel({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   return (
     <div
@@ -111,28 +145,28 @@ function ShortcutPanel({ visible, onClose }: { visible: boolean; onClose: () => 
         opacity: visible ? 1 : 0,
         transform: visible ? "scale(1)" : "scale(0.98)",
         transition: "all 180ms ease",
-        pointerEvents: visible ? "auto" : "none",
+        pointerEvents: visible ? "auto" : "none"
       }}
     >
       <div style={{ fontWeight: 700, marginBottom: 8 }}>Keyboard shortcuts</div>
-      <div><strong>B</strong> — Base Image</div>
-      <div><strong>M</strong> — Map View</div>
+      <div><strong>B</strong> — Base Image (NRW WMS)</div>
+      <div><strong>M</strong> — Map View (OSM)</div>
       <div><strong>R</strong> — Reset Map</div>
       <div><strong>D</strong> — Toggle Theme</div>
       <div style={{ marginTop: 10, textAlign: "center" }}>
-        <button onClick={onClose} style={{ padding: "8px 10px", background: "#d97706", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>
-          Close
-        </button>
+        <button onClick={onClose} style={{ padding: "8px 10px", background: "#d97706", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>Close</button>
       </div>
     </div>
   );
 }
 
-/* ---------------- Main component ---------------- */
+/* ======================== Main Component ======================== */
+
 export default function MapViewerEnhanced() {
   const mapRef = useRef<L.Map | null>(null);
   const miniRef = useRef<L.Map | null>(null);
   const featureGroupRef = useRef<any>(null);
+  const wmsRef = useRef<L.TileLayer.WMS | null>(null);
 
   const [aois, setAoIs] = useState<AOI[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -154,58 +188,71 @@ export default function MapViewerEnhanced() {
   const [tooltip, setTooltip] = useState<{ text: string; x?: number; y?: number; visible: boolean }>({ text: "", visible: false });
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [fading, setFading] = useState(false);
-
   const [shortcutOpen, setShortcutOpen] = useState(false);
 
-  useEffect(() => { setAoIs(loadAOIs()); }, []);
-  // sync minimap when they mount
+  // sidebar sections
+  const [sectionOpen, setSectionOpen] = useState({ baseSelect: true, defineAOI: true, defineObjects: false });
+
   useEffect(() => {
-    // Attach sync if both refs are set later
-    const t = setTimeout(() => {
-      if (mapRef.current && miniRef.current) {
-        const main = mapRef.current;
-        const mini = miniRef.current;
-        const sync = () => {
-          try {
-            const c = main.getCenter();
-            const z = Math.max(0, main.getZoom() - 4);
-            mini.setView(c, z, { animate: false });
-          } catch {}
-        };
-        main.on("move", sync);
-        main.on("zoom", sync);
-        sync();
-        // cleanup
-        return () => {
-          main.off("move", sync);
-          main.off("zoom", sync);
-        };
-      }
-    }, 300);
-    return () => clearTimeout(t);
+    setAoIs(loadAOIs());
   }, []);
 
-  /* ---------------- Autocomplete ---------------- */
+  useSyncMiniMap(mapRef, miniRef);
+
+  /* ---------------- Manage WMS when viewMode toggles ---------------- */
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const map = mapRef.current;
+
+    // Remove old WMS layer safely
+    if (wmsRef.current && map.hasLayer(wmsRef.current)) {
+      try {
+        map.removeLayer(wmsRef.current);
+      } catch {}
+      wmsRef.current = null;
+    }
+
+    // Add WMS when switching to base
+    if (viewMode === "base") {
+      try {
+        const layer = createWmsLayer(map, NRW_WMS_LAYER);
+        wmsRef.current = layer;
+      } catch (err) {
+        console.error("WMS load error", err);
+        toast.error("Failed to load NRW WMS");
+      }
+    }
+
+    // Always return a cleanup function (even if empty) — prevents React errors
+    return () => {};
+  }, [viewMode]);
+
+  /* ---------------- Autocomplete (Nominatim restricted to Germany) ---------------- */
   async function fetchSuggestions(q: string) {
     if (!q) { setSuggestions([]); return; }
     try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&polygon_geojson=1&limit=6&q=${encodeURIComponent(q)}`;
+      const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&polygon_geojson=1&limit=8&countrycodes=de&q=${encodeURIComponent(q)}`;
       const res = await fetch(url);
       const data = await res.json();
       setSuggestions(Array.isArray(data) ? data : []);
-    } catch { setSuggestions([]); }
+    } catch {
+      setSuggestions([]);
+    }
   }
+
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const v = e.target.value;
     setSearchQuery(v);
     fetchSuggestions(v);
   }
 
-  /* ---------------- Apply suggestion ---------------- */
+  /* ---------------- Apply suggestion: zoom + polygon ---------------- */
   function applySuggestion(s: any) {
     setSearchQuery(s.display_name);
     setSuggestions([]);
-    showTooltip("Outlined city area (if available).", 260, 90);
+    showTooltip("Outlined area (if available).", 220, 90);
+
     if (s.lat && s.lon) {
       mapRef.current?.setView([parseFloat(s.lat), parseFloat(s.lon)], 12, { animate: true });
     }
@@ -217,7 +264,7 @@ export default function MapViewerEnhanced() {
         try {
           const layer = L.geoJSON(s.geojson);
           mapRef.current?.fitBounds(layer.getBounds(), { padding: [40, 40] });
-        } catch {}
+        } catch { /* ignore */ }
       }, 80);
     } else {
       setOutlinePolygon(null);
@@ -225,25 +272,21 @@ export default function MapViewerEnhanced() {
     }
   }
 
-  /* ---------------- Apply outline ---------------- */
+  /* ---------------- Apply outline (add to FeatureGroup) ---------------- */
   function applyOutlineAsBase() {
-    if (!outlinePolygon) {
-      toast.error("No polygon outline available — draw or pick another suggestion.");
-      return;
-    }
+    if (!outlinePolygon) { toast.error("No outline available."); return; }
     const fg = featureGroupRef.current;
     if (!fg) return;
     fg.clearLayers();
     const layer = L.geoJSON(outlinePolygon, { style: { color: "#d08742", weight: 3, dashArray: "6 6", fillOpacity: 0.05 } });
     layer.addTo(fg);
-    try { mapRef.current?.fitBounds(layer.getBounds(), { padding: [30, 30] }); } catch {}
+    try { mapRef.current?.fitBounds(layer.getBounds(), { padding: [30, 30] }); } catch { }
     setConfirmDisabled(false);
     setStep(2);
-    showTooltip("Outlined city area as your base shape", 380, 280);
-    toast.success("Outline applied — edit if you want, then Confirm.");
+    toast.success("Outline applied — edit if needed.");
   }
 
-  /* ---------------- Confirm AOI ---------------- */
+  /* ---------------- Confirm AOI (save to localStorage) ---------------- */
   function confirmAOI() {
     const fg = featureGroupRef.current;
     if (!fg) { toast.error("No area to confirm"); return; }
@@ -255,7 +298,6 @@ export default function MapViewerEnhanced() {
     addAOI(aoi);
     setAoIs(loadAOIs());
     setStep(3);
-    showTooltip("Area saved. You can view it in the list and zoom to it.", 260, 120);
     toast.success("Area of Interest saved");
   }
 
@@ -266,6 +308,7 @@ export default function MapViewerEnhanced() {
     setStep(2);
     showTooltip("Shape drawn — click Confirm to save", 260, 120);
   }
+
   function onDeleted() {
     const fg = featureGroupRef.current;
     const count = fg ? Object.keys((fg as any)._layers || {}).length : 0;
@@ -273,7 +316,7 @@ export default function MapViewerEnhanced() {
     setAoIs(loadAOIs());
   }
 
-  /* ---------------- Programmatic triggers (leaflet-draw) ---------------- */
+  /* programmatic triggers for leaflet-draw */
   function clickDraw(selector: string) {
     const btn = document.querySelector(selector) as HTMLElement | null;
     btn?.click();
@@ -284,27 +327,22 @@ export default function MapViewerEnhanced() {
   const saveEdit = () => clickDraw(".leaflet-draw-edit-save");
   const deleteShapes = () => clickDraw(".leaflet-draw-edit-remove");
 
+  /* ---------------- AOI utilities: show, zoom, delete ---------------- */
   function zoomToSaved(a: AOI) {
     try {
       const layer = L.geoJSON(a.geometry);
       mapRef.current?.fitBounds(layer.getBounds(), { padding: [40, 40] });
     } catch { toast.error("Cannot zoom"); }
   }
-
-  /* ---------------- Show AOI highlight briefly ---------------- */
   function showAOI(a: AOI) {
     try {
-      const map = mapRef.current;
-      if (!map) return;
-      const layer = L.geoJSON(a.geometry, { style: { color: "#ffd166", weight: 3, fillOpacity: 0.08 } }).addTo(map);
-      map.fitBounds(layer.getBounds(), { padding: [30, 30] });
-      setTimeout(() => {
-        try { map.removeLayer(layer); } catch {}
-      }, 2400);
+      const m = mapRef.current;
+      if (!m) return;
+      const layer = L.geoJSON(a.geometry, { style: { color: "#ffd166", weight: 3, fillOpacity: 0.08 } }).addTo(m);
+      m.fitBounds(layer.getBounds(), { padding: [30, 30] });
+      setTimeout(() => { try { m.removeLayer(layer); } catch { } }, 2400);
     } catch { toast.error("Cannot show AOI"); }
   }
-
-  /* ---------------- Delete AOI ---------------- */
   function deleteAOI(id: string) {
     const list = loadAOIs().filter(x => x.id !== id);
     saveAOIs(list);
@@ -312,21 +350,19 @@ export default function MapViewerEnhanced() {
     toast.success("AOI deleted");
   }
 
-  /* ---------------- Reset map ---------------- */
+  /* ---------------- Reset & Theme ---------------- */
   function resetMap() {
     if (!mapRef.current) return;
     mapRef.current.setView(INITIAL_CENTER, INITIAL_ZOOM);
     mapRef.current.setZoom(INITIAL_ZOOM);
     toast.success("Map reset");
   }
-
-  /* ---------------- Theme toggle with fade ---------------- */
   function applyTheme(next: "light" | "dark") {
     if (theme === next) return;
     setFading(true);
     setTimeout(() => {
       setTheme(next);
-      try { localStorage.setItem(THEME_KEY, next); } catch {}
+      try { localStorage.setItem(THEME_KEY, next); } catch { }
       setTimeout(() => setFading(false), 280);
     }, 160);
   }
@@ -335,11 +371,6 @@ export default function MapViewerEnhanced() {
   function showTooltip(text: string, x?: number, y?: number) {
     setTooltip({ text, x, y, visible: true });
     window.setTimeout(() => setTooltip(prev => ({ ...prev, visible: false })), 2600);
-  }
-
-  function getTileUrlForView(mode: "base" | "map", currentTheme: "light" | "dark") {
-    if (currentTheme === "light") return mode === "base" ? TILE_ARCGIS : TILE_OSM;
-    return TILE_CARTO_DARK;
   }
 
   const fadeOverlayStyle: React.CSSProperties = {
@@ -352,10 +383,23 @@ export default function MapViewerEnhanced() {
     zIndex: 5400
   };
 
-  /* sidebar transform */
-  const sidebarTransform = sidebarOpen ? "translateX(0)" : "translateX(-420px)";
+  const sidebarStyle: React.CSSProperties = {
+    width: 360,
+    padding: 18,
+    boxSizing: "border-box",
+    background: theme === "dark" ? "#071022" : "#fff",
+    color: theme === "dark" ? "#e6eef8" : "#111827",
+    borderRight: theme === "dark" ? "1px solid #0f1724" : "1px solid #e6e6e6",
+    transition: "transform 320ms cubic-bezier(.2,.9,.2,1), background 200ms ease",
+    zIndex: 4500,
+    position: sidebarOpen ? "relative" : "absolute",
+    transform: sidebarOpen ? "translateX(0)" : "translateX(-420px)",
+    left: 0,
+    top: 0,
+    bottom: 0
+  };
 
-  /* ---------------- Keyboard shortcuts (B,M,R,D,?) ---------------- */
+  /* ---------------- Keyboard shortcuts ---------------- */
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement).tagName.toLowerCase();
@@ -370,52 +414,37 @@ export default function MapViewerEnhanced() {
       if (k === "b") {
         setFading(true);
         setTimeout(() => { setViewMode("base"); setFading(false); }, 140);
-        toast("Switched to Base Image (🛰)");
+        toast("Switched to Base (NRW WMS)");
       }
       if (k === "m") {
         setFading(true);
         setTimeout(() => { setViewMode("map"); setFading(false); }, 140);
-        toast("Switched to Map View (🗺)");
+        toast("Switched to Map View");
       }
-      if (k === "r") {
-        resetMap();
-      }
-      if (k === "d") {
-        applyTheme(theme === "light" ? "dark" : "light");
-      }
+      if (k === "r") resetMap();
+      if (k === "d") applyTheme(theme === "light" ? "dark" : "light");
     }
 
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [theme]);
 
-  /* ---------------- JSX ---------------- */
+  /* ---------------- Render JSX ---------------- */
   return (
     <div style={{ height: "100vh", width: "100%", fontFamily: "Inter, Roboto, Arial, sans-serif", background: theme === "dark" ? "#071022" : "#fff" }}>
       <Toaster position="bottom-right" />
       <div style={{ display: "flex", height: "100%" }}>
         {/* Sidebar */}
-        <aside style={{
-          width: 380,
-          padding: 18,
-          boxSizing: "border-box",
-          background: theme === "dark" ? "#071022" : "#fff",
-          color: theme === "dark" ? "#e6eef8" : "#111827",
-          borderRight: theme === "dark" ? "1px solid #0f1724" : "1px solid #e6e6e6",
-          transition: "transform 320ms cubic-bezier(.2,.9,.2,1), background 200ms ease",
-          transform: sidebarTransform,
-          zIndex: 4500,
-          position: "relative"
-        }}>
+        <aside style={sidebarStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              <div style={{ fontSize: 14, color: theme === "dark" ? "#ffa86b" : "#c96a26", fontWeight: 700 }}>Define Area of Interest</div>
-              <div style={{ fontSize: 12, color: theme === "dark" ? "#9fb2c9" : "#6b7280" }}>Search or draw area on map</div>
+              <div style={{ fontSize: 14, color: theme === "dark" ? "#ffa86b" : "#c96a26", fontWeight: 700 }}>Project</div>
+              <div style={{ fontSize: 12, color: theme === "dark" ? "#9fb2c9" : "#6b7280" }}>NRW base + AOI tools</div>
             </div>
 
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button onClick={() => applyTheme(theme === "light" ? "dark" : "light")} title="Toggle theme" style={{ padding: "6px 8px", borderRadius: 8, background: theme === "dark" ? "#0b1220" : "#f8fafc", border: "1px solid rgba(0,0,0,0.06)", cursor: "pointer" }}>
-                {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
+              <button onClick={() => applyTheme(theme === "light" ? "dark" : "light")} style={{ padding: "6px 8px", borderRadius: 8, background: theme === "dark" ? "#0b1220" : "#f8fafc", border: "1px solid rgba(0,0,0,0.06)", cursor: "pointer" }}>
+                {theme === "dark" ? "🌙" : "☀️"}
               </button>
 
               <button onClick={() => setSidebarOpen(s => !s)} style={{ padding: "6px 8px", borderRadius: 8, background: theme === "dark" ? "#0b1220" : "#f3f4f6", cursor: "pointer" }}>
@@ -424,68 +453,72 @@ export default function MapViewerEnhanced() {
             </div>
           </div>
 
-          {/* Steps */}
-          <div style={{ display: "flex", gap: 16, marginTop: 14 }}>
-            {[1, 2, 3].map(n => (
-              <div key={n} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <div style={{
-                  width: 34, height: 34, borderRadius: 999,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: step >= (n as number) ? "#c96a26" : (theme === "dark" ? "#0b1220" : "#f3f4f6"),
-                  color: step >= (n as number) ? "#fff" : (theme === "dark" ? "#9fb2c9" : "#6b7280"),
-                  fontWeight: 700
-                }}>{n}</div>
-                <div style={{ fontSize: 13 }}>{n === 1 ? "Search" : n === 2 ? "Edit" : "Confirm"}</div>
-              </div>
-            ))}
-          </div>
+          {/* Select Base */}
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }} onClick={() => setSectionOpen(s => ({ ...s, baseSelect: !s.baseSelect }))}>
+              <div style={{ fontWeight: 700 }}>Select Base Image</div>
+              <div>{sectionOpen.baseSelect ? "▾" : "▸"}</div>
+            </div>
 
-          {/* Search input */}
-          <div style={{ marginTop: 16 }}>
-            <input value={searchQuery} onChange={handleInputChange} placeholder="Search for a city (e.g., Cologne)" style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid " + (theme === "dark" ? "#233142" : "#e5e7eb"), background: theme === "dark" ? "#071022" : "#fff", color: theme === "dark" ? "#e6eef8" : "#111827", boxSizing: "border-box" }} />
-            {suggestions.length > 0 && (
-              <div style={{ marginTop: 8, maxHeight: 180, overflowY: "auto", borderRadius: 8, border: "1px solid #e6e6e6", background: theme === "dark" ? "#071022" : "#fff" }}>
-                {suggestions.map((s, idx) => (
-                  <div key={idx} onClick={() => applySuggestion(s)} style={{ padding: 10, borderBottom: "1px solid rgba(0,0,0,0.04)", cursor: "pointer", color: theme === "dark" ? "#d8e6f8" : "#111827" }}>
-                    <div style={{ fontWeight: 700 }}>{String(s.display_name).split(",")[0]}</div>
-                    <div style={{ fontSize: 12, color: theme === "dark" ? "#9fb2c9" : "#6b7280" }}>{s.display_name}</div>
-                  </div>
-                ))}
+            {sectionOpen.baseSelect && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 8 }}>Base: NRW DOP orthophoto (WMS)</div>
+                <button onClick={() => setViewMode("base")} style={{ marginRight: 8, padding: "8px 10px", borderRadius: 8, background: viewMode === "base" ? "#c96a26" : "#fff", color: viewMode === "base" ? "#fff" : "#111", border: "1px solid #e6e6e6" }}>Use NRW</button>
+                <button onClick={() => setViewMode("map")} style={{ padding: "8px 10px", borderRadius: 8, background: viewMode === "map" ? "#c96a26" : "#fff", color: viewMode === "map" ? "#fff" : "#111", border: "1px solid #e6e6e6", marginLeft: 8 }}>Use Map</button>
               </div>
             )}
           </div>
 
-          {/* Sidebar action buttons */}
-          <div style={{ marginTop: 12 }}>
-            <button onClick={applyOutlineAsBase} style={{ width: "100%", padding: 12, borderRadius: 10, background: theme === "dark" ? "#bb6b32" : "#c96a26", color: "#fff", border: "none", fontWeight: 700 }}>
-              Apply outline as base image
-            </button>
+          {/* Define AOI */}
+          <div style={{ marginTop: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }} onClick={() => setSectionOpen(s => ({ ...s, defineAOI: !s.defineAOI }))}>
+              <div style={{ fontWeight: 700 }}>Define Area of Interest</div>
+              <div>{sectionOpen.defineAOI ? "▾" : "▸"}</div>
+            </div>
 
-            <div style={{ marginTop: 8, fontSize: 12, color: theme === "dark" ? "#92b0cc" : "#6b7280" }}>You can always edit the shape later</div>
+            {sectionOpen.defineAOI && (
+              <>
+                <div style={{ marginTop: 8 }}>
+                  <input value={searchQuery} onChange={handleInputChange} placeholder="Search Germany (city, state...)" style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #e6e6e6" }} />
+                  {suggestions.length > 0 && (
+                    <div style={{ marginTop: 6, maxHeight: 180, overflowY: "auto", borderRadius: 8, border: "1px solid #e6e6e6", background: "#fff" }}>
+                      {suggestions.map((s, idx) => (
+                        <div key={idx} onClick={() => applySuggestion(s)} style={{ padding: 10, borderBottom: "1px solid rgba(0,0,0,0.04)", cursor: "pointer" }}>
+                          <div style={{ fontWeight: 700 }}>{String(s.display_name).split(",")[0]}</div>
+                          <div style={{ fontSize: 12, color: "#6b7280" }}>{s.display_name}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
-            <button onClick={confirmAOI} disabled={confirmDisabled} style={{ width: "100%", padding: 12, borderRadius: 10, marginTop: 12, background: confirmDisabled ? "#94a3b8" : "#b85e1f", color: "#fff", border: "none", fontWeight: 800, cursor: confirmDisabled ? "not-allowed" : "pointer" }}>
-              Confirm Area of Interest
-            </button>
+                <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+                  <button onClick={applyOutlineAsBase} style={{ flex: 1, padding: 10, borderRadius: 8, background: "#c96a26", color: "#fff" }}>Apply outline as base image</button>
+                  <button onClick={confirmAOI} disabled={confirmDisabled} style={{ flex: 1, padding: 10, borderRadius: 8, background: confirmDisabled ? "#94a3b8" : "#b85e1f", color: "#fff" }}>Confirm Area</button>
+                </div>
+              </>
+            )}
           </div>
 
-          {/* Saved AOIs */}
-          <div style={{ marginTop: 18 }}>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>Saved AOIs</div>
-            <div style={{ maxHeight: 220, overflowY: "auto", borderRadius: 10, border: "1px solid #e6e6e6", background: theme === "dark" ? "#071022" : "#fff" }}>
-              {aois.length === 0 ? <div style={{ padding: 10, color: theme === "dark" ? "#9fb2c9" : "#6b7280" }}>No AOIs created yet</div> : aois.map(a => (
-                <div key={a.id} style={{ display: "flex", justifyContent: "space-between", padding: 10, borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
-                  <div>
-                    <div style={{ fontWeight: 700 }}>{a.name}</div>
-                    <div style={{ fontSize: 12, color: theme === "dark" ? "#9fb2c9" : "#6b7280" }}>{new Date(a.createdAt).toLocaleString()}</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <button onClick={() => showAOI(a)} style={{ padding: "6px 8px", borderRadius: 8, background: theme === "dark" ? "#0b1220" : "#f3f4f6" }}>Show</button>
-                    <button onClick={() => zoomToSaved(a)} style={{ padding: "6px 8px", borderRadius: 8, background: theme === "dark" ? "#0b1220" : "#f3f4f6" }}>Zoom</button>
-                    <button onClick={() => deleteAOI(a.id)} style={{ padding: "6px 8px", borderRadius: 8, background: "#ffe8e6", color: "#b91c1c" }}>Delete</button>
-                  </div>
-                </div>
-              ))}
+          {/* AOI list */}
+          <div style={{ marginTop: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontWeight: 700 }}>Areas</div>
             </div>
+
+            <div style={{ marginTop: 8 }}>
+              {aois.length === 0 ? <div style={{ padding: 8, color: "#6b7280" }}>No areas saved yet</div> : aois.map(a => <AreaRow key={a.id} aoi={a} onZoom={() => zoomToSaved(a)} onShow={() => showAOI(a)} onDelete={() => deleteAOI(a.id)} />)}
+            </div>
+          </div>
+
+          {/* Define objects (placeholder) */}
+          <div style={{ marginTop: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }} onClick={() => setSectionOpen(s => ({ ...s, defineObjects: !s.defineObjects }))}>
+              <div style={{ fontWeight: 700 }}>Define Objects</div>
+              <div>{sectionOpen.defineObjects ? "▾" : "▸"}</div>
+            </div>
+
+            {sectionOpen.defineObjects && <div style={{ marginTop: 8, color: "#6b7280" }}>Object selection placeholder</div>}
           </div>
         </aside>
 
@@ -494,20 +527,21 @@ export default function MapViewerEnhanced() {
           <MapContainer center={INITIAL_CENTER} zoom={INITIAL_ZOOM} style={{ height: "100vh", width: "100%" }}>
             <AttachMapRef setMap={(m) => (mapRef.current = m)} />
 
-            {/* fade overlay during tile swap */}
+            {/* fade overlay */}
             <div style={fadeOverlayStyle} />
 
-            <TileLayer key={`tiles-${theme}-${viewMode}`} url={getTileUrlForView(viewMode, theme)} attribution={theme === "dark" ? "© Carto" : (viewMode === "base" ? "Tiles © Esri" : "© OpenStreetMap contributors")} />
+            {/* Tile: OSM or Carto dark for map view. For base view, WMS layer is programmatically added via createWmsLayer */}
+            {viewMode === "map" ? (
+              <TileLayer url={theme === "dark" ? TILE_CARTO_DARK : TILE_OSM} attribution={theme === "dark" ? "© Carto" : "© OpenStreetMap contributors"} noWrap={true} />
+            ) : (
+              <TileLayer url={TILE_OSM} opacity={0} noWrap={true} />
+            )}
 
             <FeatureGroup ref={(r: any) => (featureGroupRef.current = r)}>
               {/* @ts-ignore */}
-              <EditControl
-                position="topright"
-                onCreated={onCreated}
-                onDeleted={onDeleted}
+              <EditControl position="topright" onCreated={onCreated} onDeleted={onDeleted}
                 draw={{ rectangle: true, polygon: true, polyline: false, marker: false, circle: false, circlemarker: false }}
-                edit={{ remove: true }}
-              />
+                edit={{ remove: true }} />
             </FeatureGroup>
 
             {outlinePolygon && <GeoJSON data={outlinePolygon} style={{ color: "#d08742", weight: 3, dashArray: "6 6", fillOpacity: 0.03 }} />}
@@ -519,24 +553,19 @@ export default function MapViewerEnhanced() {
           <Toolbar onStartPolygon={startPolygon} onStartRectangle={startRectangle} onEdit={startEdit} onSaveEdit={saveEdit} onDeleteShapes={deleteShapes} />
           <MapControls onZoomIn={() => mapRef.current?.zoomIn()} onZoomOut={() => mapRef.current?.zoomOut()} onToggleView={() => { setFading(true); setTimeout(() => { setViewMode(v => v === "base" ? "map" : "base"); setFading(false); }, 160); }} viewMode={viewMode} />
 
-          {/* Reset + theme indicator (top-right) */}
+          {/* Reset + theme */}
           <div style={{ position: "absolute", right: 96, top: 16, zIndex: 5600, display: "flex", gap: 8 }}>
-            <button onClick={() => resetMap()} title="Reset map" style={{ padding: "8px 10px", borderRadius: 10, background: theme === "dark" ? "#0b1220" : "#fff", border: "1px solid #e6e6e6", cursor: "pointer" }}>🔄 Reset map</button>
-            <div style={{ padding: "8px 12px", borderRadius: 10, background: theme === "dark" ? "#071022" : "#fff", border: "1px solid #e6e6e6", display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ fontSize: 14 }}>{theme === "dark" ? "🌙 Dark" : "☀️ Light"}</div>
-            </div>
+            <button onClick={() => resetMap()} title="Reset map" style={{ padding: "8px 10px", borderRadius: 10, background: theme === "dark" ? "#0b1220" : "#fff", border: "1px solid #e6e6e6", cursor: "pointer" }}>🔄 Reset</button>
+            <div style={{ padding: "8px 12px", borderRadius: 10, background: theme === "dark" ? "#071022" : "#fff", border: "1px solid #e6e6e6" }}>{theme === "dark" ? "🌙 Dark" : "☀️ Light"}</div>
           </div>
 
           {/* Bottom-left view toggle */}
           <div style={{ position: "absolute", left: 20, bottom: 20, zIndex: 5500, display: "flex", borderRadius: 12, overflow: "hidden", boxShadow: "0 6px 18px rgba(0,0,0,0.12)" }}>
             <button onClick={() => { setFading(true); setTimeout(() => { setViewMode("base"); setFading(false); }, 140); }} style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 14px", fontSize: 13, background: viewMode === "base" ? (theme === "dark" ? "#bb6b32" : "#c96a26") : (theme === "dark" ? "#071022" : "#fff"), color: viewMode === "base" ? "#fff" : (theme === "dark" ? "#d8e6f8" : "#111827"), border: "none", cursor: "pointer" }}>
-              <span style={{ fontSize: 16 }}>🛰</span>
-              <span>Base Image</span>
+              <span style={{ fontSize: 16 }}>🛰</span><span>Base</span>
             </button>
-
             <button onClick={() => { setFading(true); setTimeout(() => { setViewMode("map"); setFading(false); }, 140); }} style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 14px", fontSize: 13, background: viewMode === "map" ? (theme === "dark" ? "#bb6b32" : "#c96a26") : (theme === "dark" ? "#071022" : "#fff"), color: viewMode === "map" ? "#fff" : (theme === "dark" ? "#d8e6f8" : "#111827"), border: "none", cursor: "pointer" }}>
-              <span style={{ fontSize: 16 }}>🗺</span>
-              <span>Map View</span>
+              <span style={{ fontSize: 16 }}>🗺</span><span>Map</span>
             </button>
           </div>
 
@@ -568,6 +597,36 @@ export default function MapViewerEnhanced() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ======================== AreaRow subcomponent ======================== */
+
+function AreaRow({ aoi, onZoom, onShow, onDelete }: { aoi: AOI, onZoom: () => void, onShow: () => void, onDelete: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ width: 12, height: 12, background: "#c96a26", borderRadius: 2 }} />
+          <div>
+            <div style={{ fontWeight: 700 }}>{aoi.name}</div>
+            <div style={{ fontSize: 12, color: "#6b7280" }}>{new Date(aoi.createdAt).toLocaleString()}</div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={onShow} style={{ padding: "6px 8px", borderRadius: 6 }}>Show</button>
+          <button onClick={onZoom} style={{ padding: "6px 8px", borderRadius: 6 }}>Zoom</button>
+          <button onClick={onDelete} style={{ padding: "6px 8px", borderRadius: 6, background: "#ffe8e6", color: "#b91c1c" }}>Delete</button>
+          <button onClick={() => setOpen(o => !o)} style={{ padding: "6px 8px", borderRadius: 6 }}>{open ? "▾" : "▸"}</button>
+        </div>
+      </div>
+
+      {open && <div style={{ padding: 8, background: "rgba(0,0,0,0.02)" }}>
+        <div style={{ fontSize: 13 }}>Geometry: {aoi.geometry?.type || "—"}</div>
+      </div>}
     </div>
   );
 }

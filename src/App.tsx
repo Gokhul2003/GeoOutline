@@ -1,6 +1,4 @@
-import React from 'react';
-import LeftRail from './components/LeftRail';
-import Sidebar from './components/Sidebar/Sidebar';
+
 import MapViewer from './components/MapViewer/MapViewer';
 
 export default function App() {
