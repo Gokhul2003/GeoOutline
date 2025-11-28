@@ -4,7 +4,7 @@ type Props = {
   onZoomIn?: () => void;
   onZoomOut?: () => void;
   onToggleView?: () => void;
-  viewMode?: "base" | "map";   // made optional
+  viewMode?: "base" | "map";
 };
 
 export default function MapControls({
@@ -14,49 +14,15 @@ export default function MapControls({
   viewMode,
 }: Props) {
   return (
-    <div
-      className="controls-cluster absolute right-4 bottom-6 z-[5000] flex flex-col gap-3"
-      aria-hidden={false}
-    >
-      {/* Zoom buttons */}
-      <button
-        title="Zoom in"
-        onClick={onZoomIn}
-        className="w-12 h-12 rounded-lg bg-white flex items-center justify-center shadow"
-      >
-        +
-      </button>
+    <div style={{ position: "absolute", right: 18, bottom: 120, zIndex: 6000, display: "flex", flexDirection: "column", gap: 8 }}>
+      <button title="Zoom in" onClick={onZoomIn} style={{ width: 44, height: 44, borderRadius: 8, background: "white", boxShadow: "0 6px 18px rgba(0,0,0,0.08)", border: "1px solid rgba(0,0,0,0.06)", cursor: "pointer" }}>+</button>
+      <button title="Zoom out" onClick={onZoomOut} style={{ width: 44, height: 44, borderRadius: 8, background: "white", boxShadow: "0 6px 18px rgba(0,0,0,0.08)", border: "1px solid rgba(0,0,0,0.06)", cursor: "pointer" }}>−</button>
 
-      <button
-        title="Zoom out"
-        onClick={onZoomOut}
-        className="w-12 h-12 rounded-lg bg-white flex items-center justify-center shadow"
-      >
-        −
-      </button>
-
-      {/* Base / Map Toggle — only if props provided */}
-      {onToggleView && viewMode && (
-        <div className="w-36 h-10 bg-white rounded-lg flex items-center justify-between p-1 shadow">
-          <button
-            onClick={() => onToggleView()}
-            className={`text-xs px-2 py-1 rounded ${
-              viewMode === "base" ? "bg-brand-300 text-white" : ""
-            }`}
-          >
-            Base Image
-          </button>
-
-          <button
-            onClick={() => onToggleView()}
-            className={`text-xs px-2 py-1 rounded ${
-              viewMode === "map" ? "bg-brand-300 text-white" : ""
-            }`}
-          >
-            Map View
-          </button>
-        </div>
-      )}
+      {/* tiny view-mode indicator (optional) */}
+      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+        <div style={{ padding: "6px 10px", borderRadius: 8, background: viewMode === "base" ? "#c96a26" : "#fff", color: viewMode === "base" ? "#fff" : "#111827", fontSize: 12 }}>Base</div>
+        <div style={{ padding: "6px 10px", borderRadius: 8, background: viewMode === "map" ? "#c96a26" : "#fff", color: viewMode === "map" ? "#fff" : "#111827", fontSize: 12 }}>Map</div>
+      </div>
     </div>
   );
 }
