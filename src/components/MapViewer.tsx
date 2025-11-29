@@ -302,10 +302,26 @@ export default function MapViewerEnhanced() {
   }
 
   /* ---------------- Draw handlers ---------------- */
-  function onCreated() {
+  function onCreated(e: any) {
+    const layer = e.layer;
+
+    // ⭐ Make rectangle/polygon visible after drawing
+    if (layer.setStyle) {
+      layer.setStyle({
+        color: "#ff7800",
+        weight: 2,
+        fillOpacity: 0.3,
+        fillColor: "#ffb26b"
+      });
+    }
+
+    // ⭐ DO NOT CLEAR outlinePolygon (this was hiding your shape)
+    // setOutlinePolygon(null);  <-- REMOVE
+
+    // ⭐ Enable confirm button
     setConfirmDisabled(false);
-    setOutlinePolygon(null);
     setStep(2);
+
     showTooltip("Shape drawn — click Confirm to save", 260, 120);
   }
 
@@ -396,7 +412,9 @@ export default function MapViewerEnhanced() {
     transform: sidebarOpen ? "translateX(0)" : "translateX(-420px)",
     left: 0,
     top: 0,
-    bottom: 0
+    bottom: 0,
+    height: "100vh",
+    overflowY: "auto",
   };
 
   /* ---------------- Keyboard shortcuts ---------------- */
@@ -592,10 +610,10 @@ export default function MapViewerEnhanced() {
 
           {/* Toolbar & Controls */}
           <div className="controls-wrapper">
-          <Toolbar onStartPolygon={startPolygon} onStartRectangle={startRectangle} onEdit={startEdit} onSaveEdit={saveEdit} onDeleteShapes={deleteShapes} />
-        
-          
-          <MapControls  onZoomIn={() => mapRef.current?.zoomIn()} onZoomOut={() => mapRef.current?.zoomOut()} onToggleView={() => { setFading(true); setTimeout(() => { setViewMode(v => v === "base" ? "map" : "base"); setFading(false); }, 160); }} viewMode={viewMode} />
+            <Toolbar onStartPolygon={startPolygon} onStartRectangle={startRectangle} onEdit={startEdit} onSaveEdit={saveEdit} onDeleteShapes={deleteShapes} />
+
+
+            <MapControls onZoomIn={() => mapRef.current?.zoomIn()} onZoomOut={() => mapRef.current?.zoomOut()} onToggleView={() => { setFading(true); setTimeout(() => { setViewMode(v => v === "base" ? "map" : "base"); setFading(false); }, 160); }} viewMode={viewMode} />
           </div>
           {/* Reset + theme */}
           <div style={{ position: "absolute", right: 96, top: 16, zIndex: 5600, display: "flex", gap: 8 }}>
@@ -633,6 +651,31 @@ export default function MapViewerEnhanced() {
               <span style={{ fontSize: 16 }}>🗺</span><span>Map</span>
             </button>
           </div>
+          {/* Shortcut Toggle Button */}
+          <button
+            onClick={() => setShortcutOpen(true)}
+            title="Show keyboard shortcuts"
+            style={{
+              position: "absolute",
+              right: 7,
+              bottom: 130,
+              zIndex: 6000,
+              width: 42,
+              height: 42,
+              background: theme === "dark" ? "#0b1220" : "#fff",
+              borderRadius: "50%",
+              border: "1px solid #e5e5e5",
+              cursor: "pointer",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 20,
+              color: theme === "dark" ? "#e6e6e6" : "#333"
+            }}
+          >
+            ⓘ
+          </button>
 
           {/* Shortcut panel */}
           <ShortcutPanel visible={shortcutOpen} onClose={() => setShortcutOpen(false)} />

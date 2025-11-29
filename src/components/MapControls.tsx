@@ -32,8 +32,8 @@ export default function MapControls({
     <div
       style={{
         position: "absolute",
-        right: 18,
-        bottom: 120,
+        right: 60,
+        bottom: 178,
         zIndex: 6000,
         display: "flex",
         flexDirection: "column",

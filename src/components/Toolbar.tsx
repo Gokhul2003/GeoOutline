@@ -32,8 +32,8 @@ export default function Toolbar({
     <div
       style={{
         position: "absolute",
-        right: 18,
-        top: 120,
+        right: 6,
+        top: 160,
         zIndex: 6000,
         display: "flex",
         flexDirection: "column",
