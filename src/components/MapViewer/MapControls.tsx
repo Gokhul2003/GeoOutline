@@ -33,7 +33,7 @@ export default function MapControls({
       style={{
         position: "absolute",
         right: 60,
-        bottom: 178,
+        bottom: 130,
         zIndex: 6000,
         display: "flex",
         flexDirection: "column",

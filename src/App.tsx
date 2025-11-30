@@ -1,5 +1,5 @@
 
-import MapViewer from './components/MapViewer';
+import MapViewer from './components/MapViewer/MapViewerEnhanced';
 
 export default function App() {
   return (

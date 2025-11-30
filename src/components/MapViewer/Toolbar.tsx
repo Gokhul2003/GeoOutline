@@ -32,7 +32,7 @@ export default function Toolbar({
     <div
       style={{
         position: "absolute",
-        right: 6,
+        right: 8,
         top: 160,
         zIndex: 6000,
         display: "flex",
